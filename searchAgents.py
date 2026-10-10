@@ -476,8 +476,55 @@ def foodHeuristic(state: Tuple[Tuple, List[List]], problem: FoodSearchProblem):
     problem.heuristicInfo['wallCount']
     """
     position, foodGrid = state
-    "*** YOUR CODE HERE ***"
-    return 0
+    foods = foodGrid.asList()
+
+    if not foods:
+        return 0
+
+    # Exact maze distances are computed once per food location.
+    distance_maps = problem.heuristicInfo.setdefault('foodDistanceMaps', {})
+
+    for food in foods:
+        if food not in distance_maps:
+            distances = {food: 0}
+            frontier = util.Queue()
+            frontier.push(food)
+
+            while not frontier.isEmpty():
+                x, y = frontier.pop()
+
+                for neighbor in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    nx, ny = neighbor
+
+                    if (0 <= nx < problem.walls.width
+                            and 0 <= ny < problem.walls.height
+                            and not problem.walls[nx][ny]
+                            and neighbor not in distances):
+                        distances[neighbor] = distances[(x, y)] + 1
+                        frontier.push(neighbor)
+
+            distance_maps[food] = distances
+
+    # Any complete route must reach food and connect all remaining food.
+    # A minimum spanning tree plus the nearest-food distance is a lower bound.
+    key = frozenset(foods)
+    mst_cache = problem.heuristicInfo.setdefault('foodMST', {})
+
+    if key not in mst_cache:
+        first = foods[0]
+        costs = {food: distance_maps[first][food] for food in foods[1:]}
+        tree_cost = 0
+
+        while costs:
+            closest = min(costs, key=costs.get)
+            tree_cost += costs.pop(closest)
+
+            for food in costs:
+                costs[food] = min(costs[food], distance_maps[closest][food])
+
+        mst_cache[key] = tree_cost
+
+    return min(distance_maps[food][position] for food in foods) + mst_cache[key]
 
 class ClosestDotSearchAgent(SearchAgent):
     "Search for all food using a sequence of searches"
